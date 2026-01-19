@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="<%= csrfToken %>" />
+    <link rel="icon" href="/images/logo.png" type="image/png" />
+    <title><%= title || "Monitoring" %> | Banjarnegara Watch</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        color: #111827;
+        background: #f6f4f0;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+      .panel {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: 1px solid #e2e8f0;
+        font-weight: 600;
+        cursor: pointer;
+        background: #111827;
+        color: #ffffff;
+        text-decoration: none;
+      }
+      .btn-ghost {
+        background: transparent;
+        color: #111827;
+      }
+      .footer {
+        border-top: 1px solid #e2e8f0;
+        padding: 18px 24px;
+        background: #ffffff;
+      }
+      .footer-inner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #6b7280;
+        font-size: 12px;
+      }
+      .footer-logo {
+        width: 40px;
+        height: auto;
+      }
+      .muted {
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body class="<%= bodyClass || '' %>">
+

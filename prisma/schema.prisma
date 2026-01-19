@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum IncidentStatus {
+  OPEN
+  ACK
+  CLOSED
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum CheckStatus {
+  HEALTHY
+  DOWN
+  REDIRECT
+  CHANGED
+  SUSPECTED_DEFACEMENT
+}
+
+model User {
+  id                   String     @id @default(uuid()) @db.Uuid
+  name                 String
+  email                String     @unique
+  passwordHash         String
+  role                 Role
+  isActive             Boolean    @default(true)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  auditLogs            AuditLog[]
+  acknowledgedIncidents Incident[] @relation("AcknowledgedBy")
+  closedIncidents       Incident[] @relation("ClosedBy")
+}
+
+model Target {
+  id             String        @id @default(uuid()) @db.Uuid
+  name           String
+  url            String
+  group          String?
+  intervalSec    Int
+  isEnabled      Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  checkResults   CheckResult[]
+  incidents      Incident[]
+  notificationLogs NotificationLog[]
+
+  @@index([isEnabled])
+  @@index([group])
+  @@index([createdAt])
+}
+
+model CheckResult {
+  id               String      @id @default(uuid()) @db.Uuid
+  targetId         String      @db.Uuid
+  target           Target      @relation(fields: [targetId], references: [id])
+  startedAt        DateTime
+  finishedAt       DateTime
+  status           CheckStatus
+  httpStatus       Int?
+  finalUrl         String?
+  responseTimeMs   Int?
+  htmlHash         String?
+  textHash         String?
+  screenshotPath   String?
+  screenshotPhash  String?
+  title            String?
+  extractedText    String?
+  detectorScore    Int?
+  detectorReasonsJson Json?
+  htmlSnapshotPath String?
+  latestForIncident Incident? @relation("LatestCheckResult")
+  createdAt        DateTime @default(now())
+
+  @@index([targetId, startedAt])
+}
+
+model Incident {
+  id                 String        @id @default(uuid()) @db.Uuid
+  targetId           String        @db.Uuid
+  target             Target        @relation(fields: [targetId], references: [id])
+  openedAt           DateTime
+  lastSeenAt         DateTime
+  status             IncidentStatus
+  severity           Severity
+  confidence         Int?
+  reasonsJson        Json?
+  latestCheckResultId String?      @unique @db.Uuid
+  latestCheckResult  CheckResult?  @relation("LatestCheckResult", fields: [latestCheckResultId], references: [id])
+  acknowledgedById   String?       @db.Uuid
+  acknowledgedBy     User?         @relation("AcknowledgedBy", fields: [acknowledgedById], references: [id])
+  acknowledgedAt     DateTime?
+  closedById         String?       @db.Uuid
+  closedBy           User?         @relation("ClosedBy", fields: [closedById], references: [id])
+  closedAt           DateTime?
+  notes              String?
+  cleanStreak        Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  ackTokens          AckToken[]
+  notificationLogs   NotificationLog[]
+
+  @@index([targetId, status])
+  @@index([status, severity, openedAt])
+}
+
+model NotificationLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  targetId    String   @db.Uuid
+  target      Target   @relation(fields: [targetId], references: [id])
+  incidentId  String?  @db.Uuid
+  incident    Incident? @relation(fields: [incidentId], references: [id])
+  channel     String
+  sentAt      DateTime @default(now())
+  payloadJson Json?
+
+  @@index([targetId, sentAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  actorUser   User?    @relation(fields: [actorUserId], references: [id])
+  action      String
+  entity      String
+  entityId    String?
+  createdAt   DateTime @default(now())
+  metaJson    Json?
+}
+
+model AckToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  incidentId String   @db.Uuid
+  incident   Incident @relation(fields: [incidentId], references: [id])
+  tokenHash  String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([tokenHash])
+}
+

@@ -1,0 +1,10 @@
+<%- include('partials/head', { title: title || 'Acknowledged', bodyClass: 'page-ack' }) %>
+<main class="container">
+  <div class="panel">
+    <h1><%= title || 'Acknowledged' %></h1>
+    <p><%= message || 'Incident acknowledged.' %></p>
+    <a class="btn btn-primary" href="/login">Login</a>
+  </div>
+</main>
+<%- include('partials/footer') %>
+

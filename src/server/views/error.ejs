@@ -1,0 +1,10 @@
+<%- include('partials/head', { title: title || 'Error', bodyClass: 'page-error' }) %>
+<main class="container">
+  <div class="panel">
+    <h1><%= title || 'Error' %></h1>
+    <p><%= message || 'Something went wrong.' %></p>
+    <a class="btn btn-ghost" href="/">Back to dashboard</a>
+  </div>
+</main>
+<%- include('partials/footer') %>
+

@@ -1,0 +1,59 @@
+{
+  "name": "monitoring-web-app",
+  "version": "1.0.0",
+  "description": "Web-based monitoring app for defacement and negative content detection",
+  "type": "commonjs",
+  "main": "src/server/index.js",
+  "scripts": {
+    "start": "node src/server/index.js",
+    "worker": "node src/monitoring/worker.js",
+    "dev": "docker compose up",
+    "dev:ui": "vite --config vite.config.js",
+    "build:ui": "vite build --config vite.config.js",
+    "preview:ui": "vite preview --config vite.config.js",
+    "compose:up": "docker compose up -d --build",
+    "compose:down": "docker compose down -v",
+    "logs": "docker compose logs -f --tail=200",
+    "prisma:migrate": "docker compose exec web npx prisma migrate deploy",
+    "prisma:seed": "docker compose exec web node prisma/seed.js",
+    "test": "jest --runInBand"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.16.1",
+    "@tensorflow/tfjs": "^4.22.0",
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^4.16.1",
+    "cheerio": "^1.0.0-rc.12",
+    "connect-redis": "^7.1.0",
+    "csurf": "^1.11.0",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.9",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.1.5",
+    "express-session": "^1.17.3",
+    "helmet": "^7.1.0",
+    "ipaddr.js": "^2.1.0",
+    "ioredis": "^5.3.2",
+    "jimp": "^0.22.10",
+    "nsfwjs": "^4.2.1",
+    "pino": "^8.18.0",
+    "pino-http": "^8.5.0",
+    "playwright": "1.57.0",
+    "redis": "^4.6.13",
+    "sanitize-html": "^2.12.1",
+    "tesseract.js": "^5.1.0",
+    "vue": "^3.5.12",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4",
+    "prisma": "^5.16.1",
+    "vite": "^5.4.10"
+  }
+}
+
