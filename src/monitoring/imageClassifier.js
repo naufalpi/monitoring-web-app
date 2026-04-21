@@ -70,7 +70,7 @@ function buildTensorFromImage(image) {
   return tf.tensor3d(values, [height, width, 3], "int32");
 }
 
-async function classifyImage(imagePath, imageInput) {
+async function classifyImage(imageInput) {
   if (!config.enableImageClassifier) {
     return { score: 0, reasons: [], probabilities: {}, method: "disabled" };
   }
@@ -81,7 +81,7 @@ async function classifyImage(imagePath, imageInput) {
       return { score: 0, reasons: [], probabilities: {}, method: "unavailable" };
     }
 
-    const image = imageInput || (await Jimp.read(imagePath));
+    const image = imageInput instanceof Jimp ? imageInput : await Jimp.read(imageInput);
     const tensor = buildTensorFromImage(image);
     const predictions = await model.classify(tensor);
     tensor.dispose();

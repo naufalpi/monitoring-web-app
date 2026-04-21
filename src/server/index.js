@@ -4,6 +4,7 @@ const logger = require("../utils/logger");
 
 async function start() {
   try {
+    config.ensureProductionConfig();
     const app = await createApp();
     app.listen(config.port, () => {
       logger.info(`Web server listening on ${config.port}`);

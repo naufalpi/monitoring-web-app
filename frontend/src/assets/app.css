@@ -680,19 +680,27 @@ a:hover {
 }
 
 .auth-card {
-  max-width: 520px;
+  max-width: 860px;
   margin: 80px auto;
   background: var(--surface);
-  padding: 32px;
+  padding: 36px 40px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-shell {
+  position: relative;
+  padding: 24px 0 64px;
 }
 
 .auth-language {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 16px;
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 1;
 }
 
 .auth-header {
@@ -702,11 +710,87 @@ a:hover {
   margin-bottom: 20px;
 }
 
+.auth-grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+}
+
+.auth-card,
+.auth-grid {
+  position: relative;
+  z-index: 1;
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding-right: 24px;
+  border-right: 1px solid var(--border);
+}
+
+.auth-logo {
+  width: 110px;
+  height: auto;
+}
+
+.auth-brand-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+}
+
+.auth-brand-sub {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 14px;
+  padding-left: 8px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-form input {
+  background: var(--surface);
+}
+
+.auth-form .btn {
+  margin-top: 8px;
+  width: 100%;
+}
+
 .filter-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
   align-items: end;
+}
+
+.dashboard-filters {
+  grid-template-columns: minmax(240px, 2fr) repeat(2, minmax(180px, 1fr));
+  align-items: end;
+  margin-bottom: 18px;
+  gap: 18px;
+}
+
+.filter-field {
+  display: grid;
+  gap: 6px;
+}
+
+.filter-field--search input {
+  width: 100%;
 }
 
 .filter-row--compact {
@@ -856,6 +940,26 @@ a:hover {
 
   .auth-card {
     margin: 40px 16px;
+    padding: 28px 24px;
+  }
+
+  .auth-language {
+    position: static;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .auth-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .auth-brand {
+    align-items: center;
+    text-align: center;
+    padding-right: 0;
+    border-right: none;
   }
 
   .timeline-meta {

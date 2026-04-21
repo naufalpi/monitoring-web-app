@@ -2,7 +2,7 @@ const { prisma } = require("../db/prisma");
 const config = require("../utils/config");
 const logger = require("../utils/logger");
 
-const inFlightTargets = new Set();
+const inFlightTargets = new Map();
 let hydrated = false;
 
 async function hydrateInFlight(queue) {
@@ -10,11 +10,27 @@ async function hydrateInFlight(queue) {
     const jobs = await queue.getJobs(["wait", "active"], 0, -1);
     for (const job of jobs) {
       if (job && job.data && job.data.targetId) {
-        inFlightTargets.add(job.data.targetId);
+        inFlightTargets.set(job.data.targetId, {
+          jobId: job.id,
+          enqueuedAt: job.timestamp || Date.now()
+        });
       }
     }
   } catch (error) {
     logger.warn(error, "Failed to hydrate in-flight jobs");
+  }
+}
+
+async function isJobActive(queue, entry) {
+  if (!entry || !entry.jobId) return false;
+  try {
+    const job = await queue.getJob(entry.jobId);
+    if (!job) return false;
+    const state = await job.getState();
+    return ["waiting", "active", "delayed", "paused"].includes(state);
+  } catch (error) {
+    logger.warn(error, "Failed to inspect in-flight job");
+    return false;
   }
 }
 
@@ -42,8 +58,13 @@ async function scheduleDueTargets(queue) {
       continue;
     }
 
-    if (inFlightTargets.has(target.id)) {
-      continue;
+    const inFlightEntry = inFlightTargets.get(target.id);
+    if (inFlightEntry) {
+      const stillActive = await isJobActive(queue, inFlightEntry);
+      if (stillActive) {
+        continue;
+      }
+      inFlightTargets.delete(target.id);
     }
 
     const bucket = Math.floor(now / intervalMs);
@@ -59,7 +80,7 @@ async function scheduleDueTargets(queue) {
           removeOnFail: 1000
         }
       );
-      inFlightTargets.add(target.id);
+      inFlightTargets.set(target.id, { jobId, enqueuedAt: now });
     } catch (error) {
       logger.warn(error, "Failed to enqueue check");
     }

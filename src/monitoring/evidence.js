@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs/promises");
 const crypto = require("crypto");
+const Jimp = require("jimp");
 const config = require("../utils/config");
 
 function formatDateFolder(date) {
@@ -29,26 +30,50 @@ function toRelative(fullPath) {
     .join("/");
 }
 
-async function writeHtmlSnapshot(targetId, startedAt, html) {
+async function persistIncidentScreenshot(sourceImage, targetId, startedAt) {
   const dir = await ensureEvidenceDir(targetId, startedAt);
-  const name = uniqueName("snapshot", "html");
+  const name = uniqueName("incident", "jpg");
   const fullPath = path.join(dir, name);
-  await fs.writeFile(fullPath, html, "utf8");
+  const image = sourceImage instanceof Jimp ? sourceImage.clone() : await Jimp.read(sourceImage);
+
+  if (config.evidenceMaxWidth > 0 && image.bitmap.width > config.evidenceMaxWidth) {
+    image.resize(config.evidenceMaxWidth, Jimp.AUTO);
+  }
+
+  image.quality(config.evidenceJpegQuality);
+  await image.writeAsync(fullPath);
+
   return toRelative(fullPath);
 }
 
-async function prepareScreenshotPath(targetId, startedAt) {
-  const dir = await ensureEvidenceDir(targetId, startedAt);
-  const name = uniqueName("screenshot", "png");
-  const fullPath = path.join(dir, name);
-  return {
-    fullPath,
-    relativePath: toRelative(fullPath)
-  };
+async function deleteStoredEvidence(relPath) {
+  if (!relPath) return;
+  const basePath = path.resolve(config.storagePath);
+  const fullPath = path.resolve(basePath, relPath);
+  if (!fullPath.startsWith(basePath)) {
+    return;
+  }
+
+  try {
+    await fs.unlink(fullPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function cleanupLegacyTempStorage() {
+  try {
+    await fs.rm(path.join(config.storagePath, "_tmp"), { recursive: true, force: true });
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
 }
 
 module.exports = {
-  writeHtmlSnapshot,
-  prepareScreenshotPath
+  cleanupLegacyTempStorage,
+  deleteStoredEvidence,
+  persistIncidentScreenshot
 };
 

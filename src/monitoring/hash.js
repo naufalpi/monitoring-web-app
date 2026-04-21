@@ -32,8 +32,8 @@ function bitCount(value) {
   return count;
 }
 
-async function computeDHash(imagePath) {
-  const image = await Jimp.read(imagePath);
+async function computeDHash(imageInput) {
+  const image = await readImage(imageInput);
   image.resize(9, 8).grayscale();
 
   const bits = [];
@@ -46,6 +46,16 @@ async function computeDHash(imagePath) {
   }
 
   return bitsToHex(bits);
+}
+
+async function readImage(imageInput) {
+  if (!imageInput) {
+    throw new Error("Image input is required");
+  }
+  if (imageInput instanceof Jimp) {
+    return imageInput.clone();
+  }
+  return Jimp.read(imageInput);
 }
 
 function bitsToHex(bits) {

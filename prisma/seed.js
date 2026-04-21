@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const existing = await prisma.user.findFirst({
-    where: { role: "SUPER_ADMIN" }
+    where: { role: "SUPER_ADMIN" },
   });
 
   if (existing) {
@@ -14,7 +14,7 @@ async function main() {
     return;
   }
 
-  const email = process.env.SEED_ADMIN_EMAIL || "admin@banjarnegara.local";
+  const email = process.env.SEED_ADMIN_EMAIL || "naufal@gmail.com";
   const name = process.env.SEED_ADMIN_NAME || "Super Admin";
   let password = process.env.SEED_ADMIN_PASSWORD;
 
@@ -30,14 +30,16 @@ async function main() {
       email,
       passwordHash,
       role: "SUPER_ADMIN",
-      isActive: true
-    }
+      isActive: true,
+    },
   });
 
   console.log("Seeded SUPER_ADMIN user:");
   console.log(`Email: ${email}`);
   console.log(`Password: ${password}`);
-  console.log("Store these credentials securely. They will not be shown again.");
+  console.log(
+    "Store these credentials securely. They will not be shown again.",
+  );
 }
 
 main()
@@ -48,4 +50,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

@@ -1,4 +1,3 @@
-const path = require("path");
 const { prisma } = require("../db/prisma");
 const config = require("../utils/config");
 const logger = require("../utils/logger");
@@ -6,11 +5,11 @@ const { lightCheck } = require("./checkers/lightCheck");
 const { deepCheck } = require("./checkers/deepCheck");
 const { scoreContent, mergeDetections } = require("./detector");
 const { sha256, computeDHash, hammingDistance } = require("./hash");
-const { writeHtmlSnapshot } = require("./evidence");
 const { runOcrIfEnabled } = require("./ocr");
 const { detectImageContent } = require("./imageDetector");
 const { handleIncident } = require("./incident");
 const { maybeNotify } = require("./notifier");
+const { maybePruneTargetHistory } = require("./retention");
 const {
   isSuspiciousRedirect,
   shouldDeepCheck,
@@ -57,7 +56,7 @@ async function runCheck(targetId, publisher) {
   let deep = null;
   if (shouldDeepCheck({ light, previous, detector: detectorLight, redirectSuspicious, forceDeepCheck })) {
     try {
-      deep = await deepSemaphore.run(() => deepCheck(target.url, target.id, startedAt));
+      deep = await deepSemaphore.run(() => deepCheck(target.url));
     } catch (error) {
       logger.warn(error, "Deep check failed");
       deep = null;
@@ -73,12 +72,12 @@ async function runCheck(targetId, publisher) {
   let ocrText = "";
   let imageSignal = null;
   let screenshotPhash = null;
-  if (deep && deep.ok && deep.screenshotPath) {
-    const screenshotFull = path.join(config.storagePath, deep.screenshotPath);
+  const screenshotBuffer = deep && deep.ok ? deep.screenshotBuffer : null;
+  if (screenshotBuffer) {
     const [ocrResult, imageResult, phashResult] = await Promise.all([
-      runOcrIfEnabled(screenshotFull),
-      detectImageContent(screenshotFull),
-      computeDHash(screenshotFull).catch((error) => {
+      runOcrIfEnabled(screenshotBuffer),
+      detectImageContent(screenshotBuffer),
+      computeDHash(screenshotBuffer).catch((error) => {
         logger.warn(error, "Failed to compute screenshot hash");
         return null;
       })
@@ -93,11 +92,6 @@ async function runCheck(targetId, publisher) {
 
   const htmlHash = finalHtml ? sha256(finalHtml) : null;
   const textHash = combinedText ? sha256(combinedText) : null;
-
-  let htmlSnapshotPath = null;
-  if (finalHtml) {
-    htmlSnapshotPath = await writeHtmlSnapshot(target.id, startedAt, finalHtml.slice(0, 500000));
-  }
 
   const phashDelta =
     previous && previous.screenshotPhash && screenshotPhash
@@ -114,6 +108,9 @@ async function runCheck(targetId, publisher) {
     currentHashes: { htmlHash, textHash }
   });
 
+  const textChanged = hasContentChanged(previous, { htmlHash, textHash });
+  const persistDetailedContent = shouldPersistDetailedContent(status, detector, redirectSuspicious);
+
   const finishedAt = new Date();
   const checkResult = await prisma.checkResult.create({
     data: {
@@ -126,17 +123,15 @@ async function runCheck(targetId, publisher) {
       responseTimeMs: light.responseTimeMs || null,
       htmlHash,
       textHash,
-      screenshotPath: deep && deep.ok ? deep.screenshotPath : null,
+      screenshotPath: null,
       screenshotPhash,
       title: title || null,
-      extractedText: combinedText ? combinedText.slice(0, 20000) : null,
+      extractedText: persistDetailedContent ? combinedText.slice(0, config.detailedExtractedTextMaxChars) : null,
       detectorScore: detector.score,
-      detectorReasonsJson: detector.reasons,
-      htmlSnapshotPath
+      detectorReasonsJson: persistDetailedContent ? detector.reasons : null,
+      htmlSnapshotPath: null
     }
   });
-
-  const textChanged = hasContentChanged(previous, { htmlHash, textHash });
 
   const reasons = collectReasons({
     status,
@@ -155,8 +150,11 @@ async function runCheck(targetId, publisher) {
     redirectSuspicious,
     textChanged,
     phashDelta,
-    reasons
+    reasons,
+    screenshotBuffer
   });
+
+  await maybePruneTargetHistory(target.id);
 
   const openIncidentId =
     incidentResult.incident && ["OPEN", "ACK"].includes(incidentResult.incident.status)
@@ -286,6 +284,16 @@ function createSemaphore(limit) {
       }
     }
   };
+}
+
+function shouldPersistDetailedContent(status, detector, redirectSuspicious) {
+  if (status === "SUSPECTED_DEFACEMENT" || status === "DOWN" || status === "REDIRECT") {
+    return true;
+  }
+  if (redirectSuspicious) {
+    return true;
+  }
+  return Boolean(detector && (detector.defaced || detector.score >= config.negativeScoreThreshold));
 }
 
 function buildIncidentPayload(incident, target) {

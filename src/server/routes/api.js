@@ -7,6 +7,7 @@ const { requireAuth } = require("../middleware/auth");
 const { requireRole, requireManageTargets, canManageTargets } = require("../middleware/rbac");
 const { loginLimiter } = require("../middleware/rateLimit");
 const { logAudit } = require("../audit");
+const { deleteStoredEvidence } = require("../../monitoring/evidence");
 
 const router = express.Router();
 
@@ -112,9 +113,17 @@ router.get("/targets", async (req, res, next) => {
   try {
     const { page, limit, skip, isAll } = getPagination(req.query);
     const group = sanitizeText(req.query.group, 100);
+    const search = sanitizeText(req.query.search, 200);
     const where = {};
     if (group) {
       where.group = group;
+    }
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { url: { contains: search, mode: "insensitive" } },
+        { group: { contains: search, mode: "insensitive" } }
+      ];
     }
     const [targets, total] = await Promise.all([
       prisma.target.findMany({
@@ -298,6 +307,56 @@ router.post("/targets/:id/disable", requireManageTargets, async (req, res, next)
   }
 });
 
+router.delete("/targets/:id", requireManageTargets, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const target = await prisma.target.findUnique({ where: { id }, select: { id: true } });
+    if (!target) {
+      return res.status(404).json({ error: "Target not found." });
+    }
+
+    const incidentIds = await prisma.incident.findMany({
+      where: { targetId: id },
+      select: { id: true }
+    });
+    const ids = incidentIds.map((incident) => incident.id);
+    const checkResults = await prisma.checkResult.findMany({
+      where: { targetId: id },
+      select: {
+        screenshotPath: true,
+        htmlSnapshotPath: true
+      }
+    });
+
+    const tx = [
+      prisma.checkResult.deleteMany({ where: { targetId: id } })
+    ];
+    if (ids.length) {
+      tx.unshift(
+        prisma.ackToken.deleteMany({ where: { incidentId: { in: ids } } }),
+        prisma.notificationLog.deleteMany({ where: { incidentId: { in: ids } } }),
+        prisma.incident.deleteMany({ where: { id: { in: ids } } })
+      );
+    }
+    tx.push(prisma.target.delete({ where: { id } }));
+
+    await prisma.$transaction(tx);
+    await cleanupCheckResultFiles(checkResults);
+
+    await logAudit({
+      actorUserId: req.user.id,
+      action: "DELETE_TARGET",
+      entity: "Target",
+      entityId: id,
+      meta: { deletedIncidents: ids.length }
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get("/incidents", async (req, res, next) => {
   try {
     const status = normalizeEnum(req.query.status, ["OPEN", "ACK", "CLOSED"]);
@@ -357,21 +416,28 @@ router.delete("/incidents", requireRole(["SUPER_ADMIN"]), async (req, res, next)
     if (severity) where.severity = severity;
     if (targetId) where.targetId = targetId;
 
-    const incidentIds = await prisma.incident.findMany({
+    const incidents = await prisma.incident.findMany({
       where,
-      select: { id: true }
+      select: {
+        id: true,
+        targetId: true,
+        openedAt: true,
+        closedAt: true
+      }
     });
 
-    if (incidentIds.length === 0) {
+    if (incidents.length === 0) {
       return res.json({ ok: true, deleted: 0 });
     }
 
-    const ids = incidentIds.map((incident) => incident.id);
+    const ids = incidents.map((incident) => incident.id);
+    const evidenceChecks = await Promise.all(incidents.map(findIncidentEvidenceCheck));
     await prisma.$transaction([
       prisma.ackToken.deleteMany({ where: { incidentId: { in: ids } } }),
       prisma.notificationLog.deleteMany({ where: { incidentId: { in: ids } } }),
       prisma.incident.deleteMany({ where: { id: { in: ids } } })
     ]);
+    await cleanupCheckResultDocumentation(evidenceChecks.filter(Boolean));
 
     await logAudit({
       actorUserId: req.user.id,
@@ -392,16 +458,26 @@ router.delete("/incidents", requireRole(["SUPER_ADMIN"]), async (req, res, next)
 router.delete("/incidents/:id", requireRole(["SUPER_ADMIN"]), async (req, res, next) => {
   try {
     const { id } = req.params;
-    const incident = await prisma.incident.findUnique({ where: { id }, select: { id: true } });
+    const incident = await prisma.incident.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        targetId: true,
+        openedAt: true,
+        closedAt: true
+      }
+    });
     if (!incident) {
       return res.status(404).json({ error: "Incident not found." });
     }
+    const evidenceCheck = await findIncidentEvidenceCheck(incident);
 
     await prisma.$transaction([
       prisma.ackToken.deleteMany({ where: { incidentId: id } }),
       prisma.notificationLog.deleteMany({ where: { incidentId: id } }),
       prisma.incident.delete({ where: { id } })
     ]);
+    await cleanupCheckResultDocumentation([evidenceCheck].filter(Boolean));
 
     await logAudit({
       actorUserId: req.user.id,
@@ -433,15 +509,9 @@ router.get("/incidents/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Incident not found." });
     }
 
-    const beforeCheck = await prisma.checkResult.findFirst({
-      where: {
-        targetId: incident.targetId,
-        startedAt: { lt: incident.openedAt }
-      },
-      orderBy: { startedAt: "desc" }
-    });
+    const evidenceCheck = await findIncidentEvidenceCheck(incident);
 
-    return res.json({ incident, beforeCheck });
+    return res.json({ incident, evidenceCheck });
   } catch (error) {
     return next(error);
   }
@@ -701,6 +771,57 @@ function getPagination(query, defaults = {}) {
   const limit = Math.min(Math.max(toInt(limitValue, 20), 1), limitMax);
   const skip = (page - 1) * limit;
   return { page, limit, skip, isAll: false };
+}
+
+async function findIncidentEvidenceCheck(incident) {
+  if (!incident) return null;
+  const startedAt = { gte: incident.openedAt };
+  if (incident.closedAt) {
+    startedAt.lte = incident.closedAt;
+  }
+
+  return prisma.checkResult.findFirst({
+    where: {
+      targetId: incident.targetId,
+      startedAt,
+      OR: [
+        { screenshotPath: { not: null } },
+        { htmlSnapshotPath: { not: null } }
+      ]
+    },
+    orderBy: { startedAt: "asc" },
+    select: {
+      id: true,
+      screenshotPath: true,
+      htmlSnapshotPath: true
+    }
+  });
+}
+
+async function cleanupCheckResultDocumentation(checkResults) {
+  if (!checkResults || checkResults.length === 0) return;
+
+  await cleanupCheckResultFiles(checkResults);
+  await prisma.$transaction(
+    checkResults.map((checkResult) =>
+      prisma.checkResult.update({
+        where: { id: checkResult.id },
+        data: {
+          screenshotPath: null,
+          htmlSnapshotPath: null
+        }
+      })
+    )
+  );
+}
+
+async function cleanupCheckResultFiles(checkResults) {
+  await Promise.all(
+    (checkResults || []).flatMap((checkResult) => [
+      deleteStoredEvidence(checkResult.screenshotPath),
+      deleteStoredEvidence(checkResult.htmlSnapshotPath)
+    ])
+  );
 }
 
 module.exports = router;

@@ -35,6 +35,10 @@
   <section class="panel">
     <div class="filter-row filter-row--compact">
       <div>
+        <label>{{ t("filters.search") }}</label>
+        <input v-model="searchQuery" type="search" @input="applySearch" />
+      </div>
+      <div>
         <label>{{ t("filters.group") }}</label>
         <select v-model="groupFilter" @change="applyGroupFilter">
           <option value="">{{ t("filters.all") }}</option>
@@ -78,6 +82,9 @@
                 <button class="btn btn-ghost" type="button" @click="toggleTarget(target)">
                   {{ target.isEnabled ? t("actions.disable") : t("actions.enable") }}
                 </button>
+                <button class="btn btn-danger" type="button" @click="deleteTarget(target)">
+                  {{ t("actions.delete") }}
+                </button>
               </template>
               <span v-else class="muted">{{ t("targets.readOnly") }}</span>
             </td>
@@ -113,12 +120,14 @@ const form = reactive({
 const targets = ref([]);
 const groups = ref([]);
 const groupFilter = ref("");
+const searchQuery = ref("");
 const editingId = ref(null);
 const canManage = computed(() => Boolean(session.capabilities?.canManageTargets));
 const page = ref(1);
 const pageSize = ref("all");
 const pageSizeOptions = [20, 50, 100, "all"];
 const total = ref(0);
+let searchTimer = null;
 
 const resetForm = () => {
   editingId.value = null;
@@ -135,6 +144,9 @@ const loadTargets = async () => {
   });
   if (groupFilter.value) {
     params.set("group", groupFilter.value);
+  }
+  if (searchQuery.value.trim()) {
+    params.set("search", searchQuery.value.trim());
   }
   const data = await apiRequest(`/api/targets?${params.toString()}`);
   targets.value = data.targets || [];
@@ -160,6 +172,16 @@ const loadGroups = async () => {
 const applyGroupFilter = () => {
   page.value = 1;
   loadTargets();
+};
+
+const applySearch = () => {
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+  }
+  searchTimer = setTimeout(() => {
+    page.value = 1;
+    loadTargets();
+  }, 300);
 };
 
 const saveTarget = async () => {
@@ -216,6 +238,25 @@ const toggleTarget = async (target) => {
         isEnabled: !target.isEnabled
       }
     });
+    await loadTargets();
+    await loadGroups();
+  } catch (error) {
+    alert(error.message);
+  }
+};
+
+const deleteTarget = async (target) => {
+  if (!confirm(t("confirm.deleteTarget"))) {
+    return;
+  }
+  try {
+    await apiRequest(`/api/targets/${target.id}`, { method: "DELETE" });
+    if (!isAllPageSize(pageSize.value)) {
+      const maxPage = Math.max(1, Math.ceil(Math.max(total.value - 1, 0) / pageSize.value));
+      if (page.value > maxPage) {
+        page.value = maxPage;
+      }
+    }
     await loadTargets();
     await loadGroups();
   } catch (error) {

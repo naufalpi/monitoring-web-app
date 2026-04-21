@@ -77,6 +77,7 @@ const messages = {
       status: "Status",
       severity: "Severity",
       group: "Group",
+      search: "Search",
       none: "None",
       all: "All",
       label: "Filters"
@@ -111,7 +112,8 @@ const messages = {
       targets: "No targets yet.",
       incidents: "No incidents found.",
       users: "No users.",
-      data: "No data yet."
+      data: "No data yet.",
+      filtered: "No results match the current filters."
     },
     incidents: {
       title: "Incidents",
@@ -126,6 +128,8 @@ const messages = {
     incident: {
       loading: "Loading incident...",
       error: "Failed to load incident.",
+      evidence: "Evidence",
+      noEvidence: "No evidence available.",
       evidenceBefore: "Evidence (Before)",
       evidenceAfter: "Evidence (After)",
       noPriorScreenshot: "No prior screenshot available.",
@@ -177,7 +181,8 @@ const messages = {
     confirm: {
       resetAll: "Delete ALL incidents? This cannot be undone.",
       resetFiltered: "Delete incidents for the current filters? This cannot be undone.",
-      deleteIncident: "Delete this incident? This cannot be undone."
+      deleteIncident: "Delete this incident? This cannot be undone.",
+      deleteTarget: "Delete this target and all related data? This cannot be undone."
     }
   },
   id: {
@@ -253,6 +258,7 @@ const messages = {
       status: "Status",
       severity: "Keparahan",
       group: "Grup",
+      search: "Cari",
       none: "Tidak ada",
       all: "Semua",
       label: "Filter"
@@ -287,7 +293,8 @@ const messages = {
       targets: "Belum ada target.",
       incidents: "Tidak ada insiden.",
       users: "Belum ada pengguna.",
-      data: "Belum ada data."
+      data: "Belum ada data.",
+      filtered: "Tidak ada data yang sesuai filter."
     },
     incidents: {
       title: "Insiden",
@@ -302,6 +309,8 @@ const messages = {
     incident: {
       loading: "Memuat insiden...",
       error: "Gagal memuat insiden.",
+      evidence: "Bukti",
+      noEvidence: "Bukti tidak tersedia.",
       evidenceBefore: "Bukti (Sebelum)",
       evidenceAfter: "Bukti (Sesudah)",
       noPriorScreenshot: "Tidak ada tangkapan layar sebelumnya.",
@@ -353,7 +362,8 @@ const messages = {
     confirm: {
       resetAll: "Hapus SEMUA insiden? Tindakan ini tidak bisa dibatalkan.",
       resetFiltered: "Hapus insiden sesuai filter saat ini? Tindakan ini tidak bisa dibatalkan.",
-      deleteIncident: "Hapus insiden ini? Tindakan ini tidak bisa dibatalkan."
+      deleteIncident: "Hapus insiden ini? Tindakan ini tidak bisa dibatalkan.",
+      deleteTarget: "Hapus target ini beserta seluruh datanya? Tindakan ini tidak bisa dibatalkan."
     }
   }
 };

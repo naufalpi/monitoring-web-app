@@ -19,13 +19,13 @@ function buildScore(skinPercent) {
   return Math.min(config.imageSkinToneMaxScore, scaled);
 }
 
-async function detectImageContent(imagePath) {
+async function detectImageContent(imageInput) {
   if (!config.enableImageDetection) {
     return { score: 0, severity: "LOW", reasons: [], skinPercent: 0, method: "disabled" };
   }
 
   try {
-    const image = await Jimp.read(imagePath);
+    const image = imageInput instanceof Jimp ? imageInput : await Jimp.read(imageInput);
     const size = Math.max(32, config.imageSampleSize);
     const stride = Math.max(1, config.imageSampleStride);
     const sample = image.clone().resize(size, size);
@@ -55,7 +55,7 @@ async function detectImageContent(imagePath) {
       reasons.push(`Image skin exposure ${skinPercent.toFixed(1)}%`);
     }
 
-    const classifier = await classifyImage(imagePath, image);
+    const classifier = await classifyImage(image);
     const combinedScore = Math.min(100, score + (classifier.score || 0));
     const combinedReasons = [...reasons, ...(classifier.reasons || [])];
     const method = classifier.method && classifier.method !== "disabled" ? classifier.method : "heuristic";

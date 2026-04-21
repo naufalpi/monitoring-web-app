@@ -1,18 +1,22 @@
 const express = require("express");
 const session = require("express-session");
 const path = require("path");
+const fs = require("fs");
 const helmet = require("helmet");
 const csurf = require("csurf");
+const compression = require("compression");
 const pinoHttp = require("pino-http");
 const { createClient } = require("redis");
 const RedisStore = require("connect-redis").default;
 
 const config = require("../utils/config");
 const logger = require("../utils/logger");
+const { prisma } = require("../db/prisma");
 const { loadUser, requireAuth } = require("./middleware/auth");
 
 async function createApp() {
   const app = express();
+  app.disable("x-powered-by");
 
   app.set("trust proxy", 1);
   app.set("view engine", "ejs");
@@ -20,18 +24,60 @@ async function createApp() {
 
   app.use(pinoHttp({ logger }));
   app.use(
+    compression({
+      filter: (req, res) => {
+        if (req.path === "/events") return false;
+        return compression.filter(req, res);
+      }
+    })
+  );
+
+  const csp = config.env === "production"
+    ? {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:"],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'", "data:"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'self'"]
+        }
+      }
+    : false;
+  app.use(
     helmet({
-      contentSecurityPolicy: false
+      contentSecurityPolicy: csp
     })
   );
 
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json());
-  app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+  const distPath = path.join(__dirname, "../../frontend/dist");
+  const publicPath = path.join(__dirname, "../../frontend/public");
+  app.use(express.static(distPath));
+  app.use(express.static(publicPath));
 
   const redisClient = createClient({ url: config.redisUrl });
   redisClient.on("error", (err) => logger.error(err, "Redis error"));
   await redisClient.connect();
+
+  app.get("/healthz", (req, res) => {
+    res.json({ ok: true });
+  });
+
+  app.get("/readyz", async (req, res) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      await redisClient.ping();
+      res.json({ ok: true });
+    } catch (error) {
+      logger.warn(error, "Readiness check failed");
+      res.status(503).json({ ok: false });
+    }
+  });
 
   app.use(
     session({
@@ -82,10 +128,18 @@ async function createApp() {
   const { initSse } = require("./sse");
   initSse(app, requireAuth);
 
-  const indexPath = path.join(__dirname, "../../frontend/dist/index.html");
-  app.get("*", (req, res) => {
-    return res.sendFile(indexPath);
-  });
+  const indexPath = path.join(distPath, "index.html");
+  if (fs.existsSync(indexPath)) {
+    app.get("*", (req, res) => {
+      return res.sendFile(indexPath);
+    });
+  } else {
+    app.get("*", (req, res) => {
+      return res
+        .status(404)
+        .send("UI build not found. Start the dev UI at http://localhost:5173.");
+    });
+  }
 
   app.use((err, req, res, next) => {
     if (err.code === "EBADCSRFTOKEN") {

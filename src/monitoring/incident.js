@@ -1,5 +1,7 @@
 const { prisma } = require("../db/prisma");
+const config = require("../utils/config");
 const { negativeScoreThreshold, phashDeltaThreshold, cleanChecksToClose } = require("./rules");
+const { deleteStoredEvidence, persistIncidentScreenshot } = require("./evidence");
 
 const severityRank = {
   LOW: 1,
@@ -34,7 +36,8 @@ async function handleIncident({
   redirectSuspicious,
   textChanged,
   phashDelta,
-  reasons
+  reasons,
+  screenshotBuffer
 }) {
   const now = new Date();
   const shouldOpen = shouldOpenIncident({
@@ -91,7 +94,25 @@ async function handleIncident({
       }
     });
 
-    return { incident: created, action: "created", severityChanged: false };
+    if (screenshotBuffer) {
+      const screenshotPath = await persistIncidentScreenshot(screenshotBuffer, target.id, checkResult.startedAt);
+      await prisma.checkResult.update({
+        where: { id: checkResult.id },
+        data: {
+          screenshotPath,
+          htmlSnapshotPath: null
+        }
+      });
+    }
+
+    await pruneTargetDocumentation(target.id);
+
+    const hydrated = await prisma.incident.findUnique({
+      where: { id: created.id },
+      include: { latestCheckResult: true }
+    });
+
+    return { incident: hydrated, action: "created", severityChanged: false };
   }
 
   if (openIncident) {
@@ -116,6 +137,49 @@ async function handleIncident({
   }
 
   return { incident: null, action: "none", severityChanged: false };
+}
+
+async function pruneTargetDocumentation(targetId) {
+  const keepCount = config.incidentEvidenceRetentionCount;
+  const documentedChecks = await prisma.checkResult.findMany({
+    where: {
+      targetId,
+      OR: [
+        { screenshotPath: { not: null } },
+        { htmlSnapshotPath: { not: null } }
+      ]
+    },
+    orderBy: { startedAt: "desc" },
+    select: {
+      id: true,
+      screenshotPath: true,
+      htmlSnapshotPath: true
+    }
+  });
+
+  const stale = documentedChecks.slice(keepCount);
+  if (stale.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    stale.flatMap((item) => [
+      deleteStoredEvidence(item.screenshotPath),
+      deleteStoredEvidence(item.htmlSnapshotPath)
+    ])
+  );
+
+  await prisma.$transaction(
+    stale.map((item) =>
+      prisma.checkResult.update({
+        where: { id: item.id },
+        data: {
+          screenshotPath: null,
+          htmlSnapshotPath: null
+        }
+      })
+    )
+  );
 }
 
 module.exports = {

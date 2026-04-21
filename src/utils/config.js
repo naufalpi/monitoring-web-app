@@ -36,6 +36,14 @@ const config = {
   perDomainDelayMs: toInt(process.env.PER_DOMAIN_DELAY_MS, 1000),
   minTextLengthForLight: toInt(process.env.MIN_TEXT_LENGTH_FOR_LIGHT, 120),
   deepCheckOnFirstRun: toBool(process.env.DEEP_CHECK_ON_FIRST_RUN, true),
+  evidenceJpegQuality: Math.min(Math.max(toInt(process.env.EVIDENCE_JPEG_QUALITY, 65), 30), 90),
+  evidenceMaxWidth: Math.max(toInt(process.env.EVIDENCE_MAX_WIDTH, 1280), 320),
+  incidentEvidenceRetentionCount: Math.max(toInt(process.env.INCIDENT_EVIDENCE_RETENTION_COUNT, 2), 1),
+  checkResultRetentionCount: Math.max(toInt(process.env.CHECK_RESULT_RETENTION_COUNT, 60), 10),
+  checkResultPruneIntervalMin: Math.max(toInt(process.env.CHECK_RESULT_PRUNE_INTERVAL_MIN, 10), 1),
+  detailedExtractedTextMaxChars: Math.max(toInt(process.env.DETAILED_EXTRACTED_TEXT_MAX_CHARS, 3000), 500),
+  closedIncidentRetentionDays: Math.max(toInt(process.env.CLOSED_INCIDENT_RETENTION_DAYS, 7), 1),
+  retentionMaintenanceIntervalMin: Math.max(toInt(process.env.RETENTION_MAINTENANCE_INTERVAL_MIN, 60), 5),
   negativeScoreThreshold: toInt(process.env.NEGATIVE_SCORE_THRESHOLD, 60),
   phashDeltaThreshold: toInt(process.env.PHASH_DELTA_THRESHOLD, 12),
   cleanChecksToClose: toInt(process.env.CLEAN_CHECKS_TO_CLOSE, 3),
@@ -62,5 +70,30 @@ const config = {
   timezone: process.env.TIMEZONE || "Asia/Jakarta"
 };
 
+function ensureProductionConfig() {
+  if (config.env !== "production") return;
+  const issues = [];
+  const defaultSecret = "change-me-please";
+  if (!config.sessionSecret || config.sessionSecret === defaultSecret || config.sessionSecret.length < 20) {
+    issues.push("SESSION_SECRET must be set to a strong value");
+  }
+  if (!config.appBaseUrl || config.appBaseUrl.includes("localhost")) {
+    issues.push("APP_BASE_URL must be set to the public URL");
+  }
+  if (!config.databaseUrl) {
+    issues.push("DATABASE_URL is required");
+  }
+  if (!config.redisUrl) {
+    issues.push("REDIS_URL is required");
+  }
+
+  if (issues.length) {
+    const error = new Error(`Invalid production configuration:\n- ${issues.join("\n- ")}`);
+    error.code = "INVALID_CONFIG";
+    throw error;
+  }
+}
+
+config.ensureProductionConfig = ensureProductionConfig;
 module.exports = config;
 

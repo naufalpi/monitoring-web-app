@@ -1,6 +1,6 @@
 const config = require("../utils/config");
 
-async function runOcrIfEnabled(imagePath) {
+async function runOcrIfEnabled(imageInput) {
   if (!config.enableOcr) {
     return "";
   }
@@ -12,7 +12,7 @@ async function runOcrIfEnabled(imagePath) {
     await worker.initialize(config.tesseractLang);
     const {
       data: { text }
-    } = await worker.recognize(imagePath);
+    } = await worker.recognize(imageInput);
     return text || "";
   } finally {
     await worker.terminate();

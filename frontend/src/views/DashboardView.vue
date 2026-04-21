@@ -26,104 +26,85 @@
     </div>
   </section>
 
-  <section class="grid-two grid-2-3">
-    <div class="panel">
-      <div class="panel-header">
+  <section class="panel">
+    <div class="panel-header">
+      <div>
         <h2>{{ t("dashboard.monitoredTargets") }}</h2>
         <span class="panel-sub">{{ t("dashboard.liveStatus") }}</span>
       </div>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>{{ t("table.name") }}</th>
-              <th>{{ t("table.status") }}</th>
-              <th>{{ t("table.lastCheck") }}</th>
-              <th>{{ t("table.response") }}</th>
-              <th>{{ t("table.incident") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="targets.length === 0">
-              <td colspan="5">{{ t("empty.targets") }}</td>
-            </tr>
-            <tr v-for="target in targets" :key="target.id">
-              <td>
-                <div class="cell-title">{{ target.name }}</div>
-                <div class="cell-sub">
-                  <a class="link link-sub" :href="target.url" target="_blank" rel="noreferrer">{{ target.url }}</a>
-                </div>
-              </td>
-              <td>
-                <span :class="badgeClass(target.status)">{{
-                  target.status || "UNKNOWN"
-                }}</span>
-              </td>
-              <td>{{ formatDate(target.lastCheck) }}</td>
-              <td>
-                {{
-                  target.responseTimeMs ? `${target.responseTimeMs} ms` : "-"
-                }}
-              </td>
-              <td>
-                <RouterLink
-                  v-if="target.lastIncidentId"
-                  class="link"
-                  :to="`/incidents/${target.lastIncidentId}`"
-                  >{{ t("actions.view") }}</RouterLink
-                >
-                <span v-else class="muted">{{ t("misc.none") }}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="panel-sub">{{ filteredTargets.length }} / {{ targets.length }}</div>
+    </div>
+    <div class="filter-row dashboard-filters">
+      <div class="filter-field filter-field--search">
+        <label>{{ t("filters.search") }}</label>
+        <input v-model="searchQuery" type="search" :placeholder="t('filters.search')" />
+      </div>
+      <div class="filter-field">
+        <label>{{ t("filters.group") }}</label>
+        <select v-model="groupFilter">
+          <option value="">{{ t("filters.all") }}</option>
+          <option v-for="group in groups" :key="group" :value="group">{{ group }}</option>
+        </select>
+      </div>
+      <div class="filter-field">
+        <label>{{ t("filters.status") }}</label>
+        <select v-model="statusFilter">
+          <option value="">{{ t("filters.all") }}</option>
+          <option v-for="status in statusOptions" :key="status" :value="status">{{ status }}</option>
+        </select>
       </div>
     </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <h2>{{ t("dashboard.incidentFeed") }}</h2>
-        <span class="panel-sub">{{ t("dashboard.latestActivity") }}</span>
-      </div>
-      <div class="timeline">
-        <div v-if="incidents.length === 0" class="timeline-item">
-          {{ t("empty.incidents") }}
-        </div>
-        <div
-          v-for="incident in incidents"
-          :key="incident.id"
-          class="timeline-item"
-        >
-          <div
-            class="timeline-dot"
-            :class="`severity-${incident.severity.toLowerCase()}`"
-          ></div>
-          <div class="timeline-content">
-            <div class="timeline-title">
-              <RouterLink :to="`/incidents/${incident.id}`">{{
-                incident.target.name
-              }}</RouterLink>
-            </div>
-            <div class="timeline-meta">
-              <div class="timeline-badges">
-                <span :class="badgeClass(incident.status)">{{
-                  incident.status
-                }}</span>
-                <span :class="badgeClass(incident.severity)">{{
-                  incident.severity
-                }}</span>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{{ t("table.name") }}</th>
+            <th>{{ t("table.status") }}</th>
+            <th>{{ t("table.lastCheck") }}</th>
+            <th>{{ t("table.response") }}</th>
+            <th>{{ t("table.incident") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="filteredTargets.length === 0">
+            <td colspan="5">{{ targets.length === 0 ? t("empty.targets") : t("empty.filtered") }}</td>
+          </tr>
+          <tr v-for="target in filteredTargets" :key="target.id">
+            <td>
+              <div class="cell-title">{{ target.name }}</div>
+              <div class="cell-sub">
+                <a class="link link-sub" :href="target.url" target="_blank" rel="noreferrer">{{ target.url }}</a>
               </div>
-              <span class="timeline-time">{{ formatDate(incident.openedAt) }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+            </td>
+            <td>
+              <span :class="badgeClass(target.status)">{{
+                target.status || "UNKNOWN"
+              }}</span>
+            </td>
+            <td>{{ formatDate(target.lastCheck) }}</td>
+            <td>
+              {{
+                target.responseTimeMs ? `${target.responseTimeMs} ms` : "-"
+              }}
+            </td>
+            <td>
+              <RouterLink
+                v-if="target.lastIncidentId"
+                class="link"
+                :to="`/incidents/${target.lastIncidentId}`"
+                >{{ t("actions.view") }}</RouterLink
+              >
+              <span v-else class="muted">{{ t("misc.none") }}</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { apiRequest } from "../services/api.js";
 import { onSse } from "../services/sse.js";
 import { t } from "../services/i18n.js";
@@ -140,12 +121,30 @@ const summary = reactive({
   openIncidents: 0,
 });
 const targets = ref([]);
-const incidents = ref([]);
+const groups = ref([]);
+const searchQuery = ref("");
+const groupFilter = ref("");
+const statusFilter = ref("");
+const statusOptions = ["HEALTHY", "DOWN", "REDIRECT", "CHANGED", "SUSPECTED_DEFACEMENT", "UNKNOWN"];
+
+const filteredTargets = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+  return targets.value.filter((target) => {
+    if (groupFilter.value && target.group !== groupFilter.value) return false;
+    if (statusFilter.value && (target.status || "UNKNOWN") !== statusFilter.value) return false;
+    if (query) {
+      const name = (target.name || "").toLowerCase();
+      const url = (target.url || "").toLowerCase();
+      const group = (target.group || "").toLowerCase();
+      if (!name.includes(query) && !url.includes(query) && !group.includes(query)) return false;
+    }
+    return true;
+  });
+});
 
 const statusByTarget = new Map();
 const incidentByTarget = new Map();
 let refreshTimer = null;
-let incidentRefreshTimer = null;
 let refreshInFlight = false;
 let refreshQueued = false;
 
@@ -191,8 +190,13 @@ const renderTargets = (data) => {
   });
 };
 
-const renderIncidents = (data) => {
-  incidents.value = data;
+const loadGroups = async () => {
+  try {
+    const data = await apiRequest("/api/targets/groups");
+    groups.value = data.groups || [];
+  } catch (error) {
+    groups.value = [];
+  }
 };
 
 const refreshDashboard = async () => {
@@ -202,14 +206,12 @@ const refreshDashboard = async () => {
   }
   refreshInFlight = true;
   try {
-    const [summaryRes, targetsRes, incidentsRes] = await Promise.all([
+    const [summaryRes, targetsRes] = await Promise.all([
       apiRequest("/api/summary"),
       apiRequest("/api/targets"),
-      apiRequest("/api/incidents?limit=8"),
     ]);
     renderSummary(summaryRes);
     renderTargets(targetsRes.targets || []);
-    renderIncidents(incidentsRes.incidents || []);
   } catch (error) {
     // Ignore.
   } finally {
@@ -227,19 +229,6 @@ const scheduleRefresh = () => {
     refreshTimer = null;
     refreshDashboard();
   }, 1000);
-};
-
-const scheduleIncidentRefresh = () => {
-  if (incidentRefreshTimer) return;
-  incidentRefreshTimer = setTimeout(async () => {
-    incidentRefreshTimer = null;
-    try {
-      const data = await apiRequest("/api/incidents?limit=8");
-      renderIncidents(data.incidents || []);
-    } catch (error) {
-      // Ignore.
-    }
-  }, 1500);
 };
 
 const applyCheckEvent = (event) => {
@@ -306,19 +295,18 @@ const handleEvent = (event) => {
   }
   if (event.type.startsWith("incident.")) {
     applyIncidentEvent(event);
-    scheduleIncidentRefresh();
   }
 };
 
 let unsubscribe = null;
 onMounted(async () => {
   await refreshDashboard();
+  await loadGroups();
   unsubscribe = onSse(handleEvent);
 });
 
 onBeforeUnmount(() => {
   if (unsubscribe) unsubscribe();
   if (refreshTimer) clearTimeout(refreshTimer);
-  if (incidentRefreshTimer) clearTimeout(incidentRefreshTimer);
 });
 </script>

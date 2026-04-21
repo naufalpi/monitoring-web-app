@@ -2,7 +2,6 @@ const { chromium } = require("playwright");
 const sanitizeHtml = require("sanitize-html");
 const config = require("../../utils/config");
 const { ensureSafeUrl, isBlockedHost, resolveAndValidateHost } = require("../ssrf");
-const { prepareScreenshotPath } = require("../evidence");
 
 const USER_AGENT = "BanjarnegaraMonitor/1.0";
 let browserPromise;
@@ -17,7 +16,7 @@ async function getBrowser() {
   return browserPromise;
 }
 
-async function deepCheck(targetUrl, targetId, startedAt) {
+async function deepCheck(targetUrl) {
   await ensureSafeUrl(targetUrl);
 
   const browser = await getBrowser();
@@ -73,8 +72,11 @@ async function deepCheck(targetUrl, targetId, startedAt) {
       }
     });
 
-    const screenshot = await prepareScreenshotPath(targetId, startedAt);
-    await page.screenshot({ path: screenshot.fullPath, fullPage: true });
+    const screenshotBuffer = await page.screenshot({
+      fullPage: true,
+      type: "jpeg",
+      quality: config.evidenceJpegQuality
+    });
 
     result = {
       ok: true,
@@ -84,7 +86,7 @@ async function deepCheck(targetUrl, targetId, startedAt) {
       text: text.slice(0, 20000),
       html,
       sanitizedHtml,
-      screenshotPath: screenshot.relativePath
+      screenshotBuffer
     };
   } catch (error) {
     result = {

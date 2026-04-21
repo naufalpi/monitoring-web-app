@@ -2,6 +2,13 @@
 
 Web-based monitoring for public-facing sites to detect defacement and negative content (judol, porn, etc.) using outside-in HTTP checks and rendered page snapshots. Backend runs on Express + Prisma; frontend is Vue 3 + Vite.
 
+Storage policy:
+- Only the first screenshot for an incident is retained as evidence
+- Evidence is stored as compressed JPEG
+- At most 2 incident documentations are retained per target
+- Check results are pruned automatically and only the latest history is kept per target
+- Closed incidents older than the retention window are deleted automatically
+
 ## Prerequisites
 - Docker Desktop (with Docker Compose)
 - Node.js (optional, only if you want to run tests locally)
@@ -42,6 +49,36 @@ docker compose up -d
 - http://localhost:5173
 4) Edit files in `src/` (backend) or `frontend/` (UI) - containers auto-reload.
 
+## Production Deployment (Ubuntu / aaPanel)
+Use the production compose file and a production `.env`. Do not use `docker-compose.override.yml` on the server.
+
+1) Prepare environment:
+```bash
+cp .env.production.example .env
+```
+2) Update `.env`:
+- Set a strong `SESSION_SECRET` (e.g. `openssl rand -hex 32`)
+- Set `APP_BASE_URL` to your public domain (e.g. `https://monitoring.example.com`)
+3) Build + start:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+4) Run migrations + seed:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web npx prisma migrate deploy
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web node prisma/seed.js
+```
+
+aaPanel reverse proxy notes:
+- Point the domain to `http://127.0.0.1:3000`
+- Disable proxy buffering for `/events` (SSE) and increase proxy read timeout
+```
+location /events {
+  proxy_buffering off;
+  proxy_read_timeout 3600s;
+}
+```
+
 ## Add Your First Target
 - Go to **Targets**
 - Add a name, URL, group/OPD, and interval
@@ -52,6 +89,14 @@ Set these in `.env`:
 ```
 TELEGRAM_BOT_TOKEN=your_token
 TELEGRAM_CHAT_ID=your_chat_id
+EVIDENCE_JPEG_QUALITY=65
+EVIDENCE_MAX_WIDTH=1280
+INCIDENT_EVIDENCE_RETENTION_COUNT=2
+CHECK_RESULT_RETENTION_COUNT=60
+CHECK_RESULT_PRUNE_INTERVAL_MIN=10
+DETAILED_EXTRACTED_TEXT_MAX_CHARS=3000
+CLOSED_INCIDENT_RETENTION_DAYS=7
+RETENTION_MAINTENANCE_INTERVAL_MIN=60
 ```
 Restart services:
 ```bash

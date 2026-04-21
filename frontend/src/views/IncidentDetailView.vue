@@ -36,26 +36,12 @@
     </template>
   </section>
 
-  <section v-if="incident" class="grid-two">
-    <div class="panel">
-      <div class="panel-header">
-        <h3>{{ t("incident.evidenceBefore") }}</h3>
-      </div>
-      <img v-if="beforeCheck?.screenshotPath" class="evidence" :src="`/evidence/${beforeCheck.screenshotPath}`" />
-      <div v-else class="muted">{{ t("incident.noPriorScreenshot") }}</div>
+  <section v-if="incident" class="panel">
+    <div class="panel-header">
+      <h3>{{ t("incident.evidence") }}</h3>
     </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <h3>{{ t("incident.evidenceAfter") }}</h3>
-      </div>
-      <img
-        v-if="incident?.latestCheckResult?.screenshotPath"
-        class="evidence"
-        :src="`/evidence/${incident.latestCheckResult.screenshotPath}`"
-      />
-      <div v-else class="muted">{{ t("incident.noScreenshot") }}</div>
-    </div>
+    <img v-if="evidenceCheck?.screenshotPath" class="evidence" :src="`/evidence/${evidenceCheck.screenshotPath}`" />
+    <div v-else class="muted">{{ t("incident.noEvidence") }}</div>
   </section>
 
   <section v-if="incident" class="panel">
@@ -71,12 +57,6 @@
     <div v-if="incident.latestCheckResult?.extractedText" class="text-snippet">
       <div class="detail-label">{{ t("incident.extractedText") }}</div>
       <pre>{{ incident.latestCheckResult.extractedText.slice(0, 800) }}</pre>
-    </div>
-    <div v-if="incident.latestCheckResult?.htmlSnapshotPath" class="text-snippet">
-      <div class="detail-label">{{ t("incident.htmlSnapshot") }}</div>
-      <a class="link" :href="`/evidence/${incident.latestCheckResult.htmlSnapshotPath}`" target="_blank" rel="noreferrer"
-        >{{ t("incident.openSnapshot") }}</a
-      >
     </div>
   </section>
 
@@ -119,7 +99,7 @@ const route = useRoute();
 const router = useRouter();
 const id = computed(() => route.params.id);
 const incident = ref(null);
-const beforeCheck = ref(null);
+const evidenceCheck = ref(null);
 const notes = ref("");
 const loading = ref(true);
 const error = ref("");
@@ -132,7 +112,7 @@ const loadIncident = async () => {
   try {
     const data = await apiRequest(`/api/incidents/${id.value}`);
     incident.value = data.incident;
-    beforeCheck.value = data.beforeCheck;
+    evidenceCheck.value = data.evidenceCheck;
     notes.value = data.incident.notes || "";
   } catch (err) {
     error.value = err.message || t("incident.error");
